@@ -1,0 +1,83 @@
+---
+title: "DATA 607 Assignment 1"
+author: "Juan Falck"
+date: "`r Sys.Date()`"
+output: openintro::lab_report
+---
+
+```{r load-packages, message=FALSE}
+library(tidyverse)
+library(reshape)
+```
+
+### Exercise 1
+
+Load the data directly from site. In this case we will use the drug use by age-group.
+
+```{r p1}
+drug_use <- read_csv("https://raw.githubusercontent.com/fivethirtyeight/data/master/drug-use-by-age/drug-use-by-age.csv")
+```
+
+
+Now we will remove the columns we don't need. We will focus of usage numbers
+
+```{r p2}
+drug_use <- drug_use %>% select(-contains("frequency"))
+```
+
+Now we will focus in my age group 50-64
+
+```{r p3}
+drug_use <- drug_use %>% filter(age=="50-64" | age=="21")
+```
+
+
+Lets remove some columns we don't need
+
+```{r p4}
+drug_use <- drug_use %>% select(-c(n))
+```
+
+Lets transpose for ease of view and save it to another data frame
+
+```{r p5}
+drug_use2 <- as_tibble(cbind(drug = names(drug_use), t(drug_use)))
+```
+
+Remove first row (age)
+
+```{r p5B}
+drug_use2 <-  filter(drug_use2,drug != 'age')
+```
+
+
+Convert to numeric
+
+```{r p6}
+drug_use2$V2 <- as.numeric(drug_use2$V2)
+drug_use2$V3 <- as.numeric(drug_use2$V3)
+```
+
+Lets sort it
+
+```{r p7}
+drug_use2 <- arrange(drug_use2,desc(V2)) %>%
+  dplyr::rename(Group_21_YO = V2, Group_50_64_YO =V3)
+drug_use2
+```
+
+Graph them, but first convert to long format from wide format
+
+```{r p8}
+data_long <- gather(drug_use2, age_group, drug_use_pct, Group_21_YO:Group_50_64_YO, factor_key=TRUE)
+
+ggplot(data_long, # the data that I am using
+       aes(x = drug, # 'aesthetic' includes x
+           y = drug_use_pct, fill=age_group)) + # and y
+  geom_bar(position="dodge", stat = "identity") + # use ACTUAL y for bar height
+  coord_flip()
+
+```
+
+...
+
