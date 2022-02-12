@@ -141,6 +141,8 @@ ratingsdf
 ## Display a formatted list of all Movie Ratings
 This query makes use of joins for the display all ratings, including their name and country of origin.
 
+RE-RUN FROM HERE!!!!
+
 ```{r run-query2}
 query<-'SELECT
   raters.rater_name,
@@ -159,7 +161,6 @@ FROM movies
 result <- dbSendQuery(ratingsDB,query)
 ratingsdf2 <- dbFetch(result)
 dbClearResult(result)
-dbDisconnect(ratingsDB)
 ratingsdf2
 ```
 
@@ -206,3 +207,7 @@ df_rater_mean
 # Conclusion
 
 SQL in my opinion is a great platform to gather and organize massive amounts of data. Technically we could put this form in production and ask many many people to submit their ratings.  While people submit ratings, we could use R sporadically to compile reports and statistics of the data being collected from the comfort of our home.
+
+```{r disconnet-db}
+dbDisconnect(ratingsDB)
+```

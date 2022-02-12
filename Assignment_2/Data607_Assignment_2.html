@@ -439,6 +439,7 @@ div.tocify {
 <div id="display-a-formatted-list-of-all-movie-ratings" class="section level2">
 <h2>Display a formatted list of all Movie Ratings</h2>
 <p>This query makes use of joins for the display all ratings, including their name and country of origin.</p>
+<p>RE-RUN FROM HERE!!!!</p>
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>query<span class="ot">&lt;-</span><span class="st">&#39;SELECT</span></span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="st">  raters.rater_name,</span></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="st">  countries.country_name,</span></span>
@@ -456,26 +457,55 @@ div.tocify {
 <span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>result <span class="ot">&lt;-</span> <span class="fu">dbSendQuery</span>(ratingsDB,query)</span>
 <span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>ratingsdf2 <span class="ot">&lt;-</span> <span class="fu">dbFetch</span>(result)</span>
 <span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a><span class="fu">dbClearResult</span>(result)</span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(ratingsDB)</span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>ratingsdf2</span></code></pre></div>
-<pre><code>##           rater_name   country_name         movie_name rating       date
-## 1         Juan Falck      Singapore  Lord Of The Rings      1 2022-02-10
-## 2         Juan Falck      Singapore      The Godfather      1 2022-02-10
-## 3         Juan Falck      Singapore          Star Wars      2 2022-02-10
-## 4         Juan Falck      Singapore Back To The Future      1 2022-02-10
-## 5         Juan Falck      Singapore         The Matrix      1 2022-02-10
-## 6         Juan Falck      Singapore       Mighty Ducks      5 2022-02-10
-## 7       Donald Trump  United States  Lord Of The Rings      1 2022-02-10
-## 8       Donald Trump  United States          Star Wars      3 2022-02-10
-## 9       Donald Trump  United States         The Matrix      2 2022-02-10
-## 10 Elisabeth Windsor United Kingdom      The Godfather      1 2022-02-10
-## 11 Elisabeth Windsor United Kingdom          Star Wars      2 2022-02-10
-## 12 Elisabeth Windsor United Kingdom Back To The Future      3 2022-02-10
-## 13 Elisabeth Windsor United Kingdom         The Matrix      5 2022-02-10
-## 14              AMLO         Mexico         The Matrix      3 2022-02-10
-## 15         Joe Biden  United States      The Godfather      2 2022-02-10
-## 16         Joe Biden  United States          Star Wars      2 2022-02-10
-## 17         Joe Biden  United States Back To The Future      1 2022-02-10</code></pre>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>ratingsdf2</span></code></pre></div>
+<pre><code>##           rater_name   country_name         movie_name rating
+## 1         Juan Falck      Singapore  Lord Of The Rings      1
+## 2         Juan Falck      Singapore      The Godfather      1
+## 3         Juan Falck      Singapore          Star Wars      2
+## 4         Juan Falck      Singapore Back To The Future      1
+## 5         Juan Falck      Singapore         The Matrix      1
+## 6         Juan Falck      Singapore       Mighty Ducks      5
+## 7       Donald Trump  United States  Lord Of The Rings      1
+## 8       Donald Trump  United States          Star Wars      3
+## 9       Donald Trump  United States         The Matrix      2
+## 10 Elisabeth Windsor United Kingdom      The Godfather      1
+## 11 Elisabeth Windsor United Kingdom          Star Wars      2
+## 12 Elisabeth Windsor United Kingdom Back To The Future      3
+## 13 Elisabeth Windsor United Kingdom         The Matrix      5
+## 14              AMLO         Mexico         The Matrix      3
+## 15         Joe Biden  United States      The Godfather      2
+## 16         Joe Biden  United States          Star Wars      2
+## 17         Joe Biden  United States Back To The Future      1
+## 18      George Lucas  United States  Lord Of The Rings      1
+## 19      George Lucas  United States      The Godfather      1
+## 20      George Lucas  United States          Star Wars      5
+## 21      George Lucas  United States Back To The Future      5
+## 22      George Lucas  United States         The Matrix      1
+## 23      George Lucas  United States       Mighty Ducks      5
+##                   date
+## 1  2022-02-10 00:00:00
+## 2  2022-02-10 00:00:00
+## 3  2022-02-10 00:00:00
+## 4  2022-02-10 00:00:00
+## 5  2022-02-10 00:00:00
+## 6  2022-02-10 00:00:00
+## 7  2022-02-10 00:00:00
+## 8  2022-02-10 00:00:00
+## 9  2022-02-10 00:00:00
+## 10 2022-02-10 00:00:00
+## 11 2022-02-10 00:00:00
+## 12 2022-02-10 00:00:00
+## 13 2022-02-10 00:00:00
+## 14 2022-02-10 00:00:00
+## 15 2022-02-10 00:00:00
+## 16 2022-02-10 00:00:00
+## 17 2022-02-10 00:00:00
+## 18 2022-02-12 23:22:25
+## 19 2022-02-12 23:22:25
+## 20 2022-02-12 23:22:25
+## 21 2022-02-12 23:22:25
+## 22 2022-02-12 23:22:25
+## 23 2022-02-12 23:22:25</code></pre>
 </div>
 <div id="displaying-all-ratings-by-person" class="section level2">
 <h2>Displaying all ratings by Person</h2>
@@ -485,14 +515,16 @@ div.tocify {
 ## 1              AMLO                  0                 0            0         0
 ## 2      Donald Trump                  0                 1            0         3
 ## 3 Elisabeth Windsor                  3                 0            0         2
-## 4         Joe Biden                  1                 0            0         2
-## 5        Juan Falck                  1                 1            5         2
+## 4      George Lucas                  5                 1            5         5
+## 5         Joe Biden                  1                 0            0         2
+## 6        Juan Falck                  1                 1            5         2
 ##   The Godfather The Matrix
 ## 1             0          3
 ## 2             0          2
 ## 3             1          5
-## 4             2          0
-## 5             1          1</code></pre>
+## 4             1          1
+## 5             2          0
+## 6             1          1</code></pre>
 <p>The code above works but has a flaw where the NA’s are displayed as 0. We may not want this behavior.</p>
 <div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>df_rater_na <span class="ot">&lt;-</span> <span class="fu">dcast</span>(ratingsdf2,rater_name<span class="sc">~</span>movie_name, <span class="at">value.var=</span><span class="st">&#39;rating&#39;</span>,<span class="at">fun.aggregate =</span> <span class="cn">NULL</span>)</span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>df_rater_na</span></code></pre></div>
@@ -500,14 +532,16 @@ div.tocify {
 ## 1              AMLO                 NA                NA           NA        NA
 ## 2      Donald Trump                 NA                 1           NA         3
 ## 3 Elisabeth Windsor                  3                NA           NA         2
-## 4         Joe Biden                  1                NA           NA         2
-## 5        Juan Falck                  1                 1            5         2
+## 4      George Lucas                  5                 1            5         5
+## 5         Joe Biden                  1                NA           NA         2
+## 6        Juan Falck                  1                 1            5         2
 ##   The Godfather The Matrix
 ## 1            NA          3
 ## 2            NA          2
 ## 3             1          5
-## 4             2         NA
-## 5             1          1</code></pre>
+## 4             1          1
+## 5             2         NA
+## 6             1          1</code></pre>
 <p>The code above should show the places (movies) where the rater didn’t submit a rating as NA.</p>
 </div>
 <div id="displaying-average-ratings-by-country" class="section level2">
@@ -516,14 +550,14 @@ div.tocify {
 <div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dcast</span>(ratingsdf2,country_name<span class="sc">~</span>movie_name, <span class="at">value.var=</span><span class="st">&#39;rating&#39;</span>, mean)</span></code></pre></div>
 <pre><code>##     country_name Back To The Future Lord Of The Rings Mighty Ducks Star Wars
 ## 1         Mexico                NaN               NaN          NaN       NaN
-## 2      Singapore                  1                 1            5       2.0
-## 3 United Kingdom                  3               NaN          NaN       2.0
-## 4  United States                  1                 1          NaN       2.5
+## 2      Singapore                  1                 1            5  2.000000
+## 3 United Kingdom                  3               NaN          NaN  2.000000
+## 4  United States                  3                 1            5  3.333333
 ##   The Godfather The Matrix
-## 1           NaN          3
-## 2             1          1
-## 3             1          5
-## 4             2          2</code></pre>
+## 1           NaN        3.0
+## 2           1.0        1.0
+## 3           1.0        5.0
+## 4           1.5        1.5</code></pre>
 </div>
 <div id="replace-nas-with-average-rating-of-column" class="section level2">
 <h2>Replace NA’s with average rating of column</h2>
@@ -538,22 +572,25 @@ div.tocify {
 <span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>df_rater_mean</span></code></pre></div>
 <pre><code>##          rater_name Back To The Future Lord Of The Rings Mighty Ducks Star Wars
-## 1              AMLO           1.666667                 1            5      2.25
-## 2      Donald Trump           1.666667                 1            5      3.00
-## 3 Elisabeth Windsor           3.000000                 1            5      2.00
-## 4         Joe Biden           1.000000                 1            5      2.00
-## 5        Juan Falck           1.000000                 1            5      2.00
+## 1              AMLO                2.5                 1            5       2.8
+## 2      Donald Trump                2.5                 1            5       3.0
+## 3 Elisabeth Windsor                3.0                 1            5       2.0
+## 4      George Lucas                5.0                 1            5       5.0
+## 5         Joe Biden                1.0                 1            5       2.0
+## 6        Juan Falck                1.0                 1            5       2.0
 ##   The Godfather The Matrix
-## 1      1.333333       3.00
-## 2      1.333333       2.00
-## 3      1.000000       5.00
-## 4      2.000000       2.75
-## 5      1.000000       1.00</code></pre>
+## 1          1.25        3.0
+## 2          1.25        2.0
+## 3          1.00        5.0
+## 4          1.00        1.0
+## 5          2.00        2.4
+## 6          1.00        1.0</code></pre>
 </div>
 </div>
 <div id="conclusion" class="section level1">
 <h1>Conclusion</h1>
 <p>SQL in my opinion is a great platform to gather and organize massive amounts of data. Technically we could put this form in production and ask many many people to submit their ratings. While people submit ratings, we could use R sporadically to compile reports and statistics of the data being collected from the comfort of our home.</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(ratingsDB)</span></code></pre></div>
 </div>
 
 
