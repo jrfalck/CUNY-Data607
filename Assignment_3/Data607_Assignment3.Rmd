@@ -1,0 +1,226 @@
+---
+title: "Data607 - Assignment Week 3"
+author: "Juan Falck"
+date: "`r Sys.Date()`"
+output: openintro::lab_report
+---
+
+Let's first delete all variables and load our tidyverse library.
+
+```{r load-packages, message=FALSE}
+rm(list=ls()) 
+library(tidyverse)
+```
+
+## Exercise 1
+
+Using the 173 majors listed in fivethirtyeight.com’s College Majors dataset [https://fivethirtyeight.com/features/the-economic-guide-to-picking-a-college-major/], provide code that identifies the majors that contain either "DATA" or "STATISTICS"
+
+**ANSWER** 
+We will load directly from github using the alternatve site which works for read_csv. I will use regex and the str_detect function in Stringr to match any major whose description either has the word "DATA" or the word "STATISTICS.
+
+Since all descriptions were already CAPITALIZED, I didn't have to transform any of the columns or adapt the regex to account for it.
+
+```{r code-chunk-label1}
+# Insert code for Exercise 1 here
+college_majors <- read_csv("https://raw.githubusercontent.com/fivethirtyeight/data/master/college-majors/majors-list.csv")
+
+# I applied a simple FILTER to get requested output
+data_majors <- college_majors %>%
+  filter(str_detect(Major, "DATA|STATISTICS"))
+
+data_majors
+```
+
+## Exercise 2
+
+Write code that transforms the data below:
+
+[1] "bell pepper"  "bilberry"     "blackberry"   "blood orange"
+[5] "blueberry"    "cantaloupe"   "chili pepper" "cloudberry"  
+[9] "elderberry"   "lime"         "lychee"       "mulberry"    
+[13] "olive"        "salal berry"
+
+Into a format like this:
+
+c("bell pepper", "bilberry", "blackberry", "blood orange", "blueberry", "cantaloupe", "chili pepper", "cloudberry", "elderberry", "lime", "lychee", "mulberry", "olive", "salal berry")
+
+
+**ANSWER**
+This one was more complicated than I thought.  The complication is that I was not exactly certain on the format of the output.
+
+The complication was how to threat the quotation chartacters " since the output has in itself quotations.  
+
+So my interpretation was to provide back a string that has quote characters within the string itself, or something like 
+**Answer_String <- "c("word1","word2", "etc")"**.  
+
+But this means that the answer string must include escapes and should be something like **Answer_String <- "c(\"word1\",\"word2\",\"etc\")"**. 
+
+This way if I write this code below the output will look like what I think the output should look like:
+
+```{r code-chunk-label12}
+Answer_String <- "c(\"word1\",\"word2\",\"etc\")"
+ writeLines(Answer_String)
+```
+
+So I tried this several ways using variations of REGEX. Let's first load the text from a file I created. The approach I took in this problems is to read the **whole text in a single variable**.
+
+```{r code-chunk-label2}
+my_file <- read_file("words.txt")
+my_file
+```
+
+Then for approach #1 I decided to use REGEX to match the whole word INCLUDING THE QUOTATION characters
+
+```{r code-chunk-label3}
+# Insert code for Exercise 1 here
+pattern <- '["“][A-Za-z ]{2,}["”]'
+str_view_all(my_file,pattern)
+data1 <- str_match_all(my_file,pattern)
+```
+
+The match was as designed, and the result stored in a LIST.  
+
+Next step was to merge the words in quotes.
+
+
+```{r code-chunk-label4}
+data1 <- paste(data1,collapse=",")
+writeLines((data1))
+```
+
+The result looks VERY CLOSE to desired answer, but not exactly as I desired since it added quotation characters around each word. So instead of ending with "word1", I ended with ""word1"". Not what I wanted.
+
+So I went the route to match the words inside quotation marks, but without the quotation characters themselves, just the words inside.  I used again REGEX to isolate words.
+
+```{r code-chunk-label5}
+pattern <- '(?<=\")[A-Za-z ]{3,}(?=\")'
+str_view_all(my_file,pattern)
+data2 <- str_match_all(my_file,pattern)
+```
+ 
+I almost got what I wanted. Unfortunately it also added some blank spaces between words in quotes. After some experimenting coudlnt' find a REGEX that would I isolate just rhe words within qoutes. 
+ 
+I decided just to go ahead remove all empty strings added to the list. Not pretty but would get me there
+
+
+```{r code-chunk-label6}
+data3 <- data2[[1]][str_count(data2[[1]],pattern=" ") < 2]
+data3
+```
+
+So that gives me what I want, a list of the just words in the file, without quotes around them.
+
+My next step was to merge the words in the list with "," as separator.
+
+
+```{r code-chunk-label8}
+data4<- paste(data3,collapse = '\",\"')
+writeLines(data4)
+```
+
+So this ALMOST completely did the trick. I just need to add **"c("** at the beginning and **")** at the end and PRESTO.
+
+
+```{r code-chunk-label9}
+final_string <- paste0('c(\"',data4,'\")')
+writeLines(final_string)
+```
+
+**Exacty the output requested in the exercise DONE!**
+
+
+## Exercise 3
+
+Describe, in words, what these expressions will match:
+
+(.)\1\1
+
+"(.)(.)\\2\\1"
+
+(..)\1
+
+"(.).\\1.\\1"
+
+"(.)(.)(.).*\\3\\2\\1"
+
+
+**ANSWER**
+
+Let's start by defining a test vector we can use to test our REGEX.
+
+```{r code-chunk-label10}
+test <- c("bell pepper", "aaairlines", "bilberry", "blackberry", "blood orange", 
+  "blueberry", "cantaloupe", "chili pepper", "church","cloudberry", 
+  "elderberry", "lime", "rhbbbf", "lychee", "mulberry", "olive",
+  "salal berry", "1234ab345 ba343", "1234ab345ba343","alibaba", "bereb", 
+  "bbgun", "asdbbb", "balacab", "balacaba", "1234568965443", "erberberbee")
+
+```
+
+
+Now lets look and test what each REGEX do
+
+```{r code-chunk-label10b}
+
+#Searches the whole string and would match 3 continuous of same character
+
+str_view_all(test,"(.)\\1\\1")
+
+#Searches the whole string and looks for 4 characters, where
+#the last pair of two is in reverse order than the first pair of two
+
+str_view_all(test,"(.)(.)\\2\\1")
+
+#Searches and look for 4 consecutive characters where the first
+#pair of characters is repeated once
+
+str_view_all(test,"(..)\\1")
+
+#Looks for a pattern of same character repeated 3 times with a character
+#in between
+
+str_view_all(test,"(.).\\1.\\1")
+
+```
+
+
+## Exercise 4
+
+Construct regular expressions to match words that:
+
+- Start and end with the same character.
+- Contain a repeated pair of letters (e.g. "church" contains "ch" repeated twice.)
+- Contain one letter repeated in at least three places (e.g. "eleven" contains three "e"s.)
+
+
+**ANSWER**
+Let's look at the REGEX I came up with for each of the cases.
+
+```{r code-chunk-label11}
+# Start and end with the same character.
+
+str_view_all(test,"^(.).*\\1$")
+
+# Contain a repeated pair of letters (e.g. "church" contains 
+# "ch" repeated twice.)
+
+str_view_all(test,"(..).*\\1")
+
+# or
+
+str_view_all(test, "([A-Za-z][A-Za-z]).*\\1")
+
+
+# Contain one letter repeated in at least three places (e.g. "eleven" contains three "e"s.)   
+
+str_view_all(test,"([a-z]|[A-Z]).*\\1.*\\1")
+
+```
+
+
+**Thank you!**
+
+
+...
+
