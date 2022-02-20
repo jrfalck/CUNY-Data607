@@ -23,11 +23,11 @@ knitr::opts_chunk$set(
 
 ## Chess Tournament
 
-We attempt this project by using ony **REGEX** to extract all fields necessary. I am sure there are many other ways to tackle this project, but since I've never used REGEX before, I decided to give it a try.
+We will attempt to complete this project by using ony **REGEX** (Regular Expressions) to extract all features necessary. I am sure there are many other ways to tackle this project, but since I've never used REGEX before, I decided to give it a try.
 
 ### Initialization
 
-We won't used many packages, just the basic ones in **TIDYVERSE**
+We won't use many packages, just the basic ones in **TIDYVERSE**
 
 ```{r}
 rm(list=ls())
@@ -36,7 +36,7 @@ library(tidyverse)
 
 ### Load the chess.txt file
 
-we will load the TXT file to manipulate with R using regular expressions. We will skip the first 4 lines, since they don't have any information we will use in this project.
+We will load the TXT file to manipulate it with R using **regular expressions** only. We will skip the first 4 lines, since they don't have any information we will use in this project.
 
 ```{r}
 my_chess <- read_lines("chess.txt", skip=4)
@@ -45,6 +45,8 @@ head(my_chess)
 
 
 ### REGEX Matching and extracting features
+
+For each feature we will use the same procedure:  We will define a pattern for REGEX.  We will use **str_match_all** to extract matching features.  We will remove any unwanted artifacts, like empty rows or columns. Trim any white-space and convert to numeric if necessary
 
 #### Extract player's NAMES
 
@@ -129,7 +131,7 @@ head(players2)
 
 #### Calculate AVERAGE RATING OF PLAYERS PLAYED 
 
-This one was tricky. Since I hace all data elements I needed to calculate the means of ratings, I was looking for a way to do it without a for loop. Unfortunately don't know enough R to figure out a sleak way of applying the MEAN to the vectors I had and store them as a simple vector. **LAPPLY** would generate the **AVERAGES** I need, but the return was a very complex multi-dimensional LIST of LISTS of LIST.  So I gave up and did the FOR LOOP.
+This one was tricky. I have all data elements I need to calculate the means of ratings, I was looking for a way to do it without a for loop. Unfortunately don't know enough R to figure out a sleak way of applying the MEAN to the vectors I had and store the results as a simple vector. **LAPPLY** would generate the **AVERAGES** I need, but the return was a very complex multi-dimensional LIST of LISTS of LISTS.  So I gave up and did the FOR LOOP.
 
 
 ```{r}
