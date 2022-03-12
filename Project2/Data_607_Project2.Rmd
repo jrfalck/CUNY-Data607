@@ -1,0 +1,339 @@
+---
+title: "607 Project 2 - Analysis of Immigration VISAS to the US"
+author: "Juan Falck"
+date: "March 3, 2022"
+output: 
+  html_document:
+    fig_height: 3
+    fig_width: 5
+  pdf_document:
+    fig_height: 3
+    fig_width: 5
+  word_document:
+    fig_height: 3
+    fig_width: 5
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, setup, include=FALSE}
+require(mosaic)   # Load additional packages here 
+knitr::opts_chunk$set(
+  tidy=FALSE,     # display code as typed
+  size="small")   # slightly smaller font for code
+```
+
+
+### Some Background on the Project
+
+There are many ways to immigrate legally to the United States. Main categories are **FAMILY BASED** and **EMPLOYMENT** based.
+
+We will focus on **FAMILY BASED**. In this type a US Citizens can ask for an Immigration VISA for their relatives.
+
+This is when it gets complicated.  The number of VISAS annually depend on two main factors: 1) The type of relationship to the US citizen and 2) The country person comes from.
+
+Sons and Daughters have highest priority, Brothers and Sisters have the lowest.  
+
+As for countries, they are divided in big buckets: China, India, Mexico, Philippines and ALL OTHER.
+
+Then is a matter of waiting in line for your turn to get a VISA. But this takes **YEARS** somtimes **MANY YEARS**
+
+The US Department of State provides monthly a **Bulletin** which gives a lot of information for Applicants regarding Immigration things.  This bulleting is published in their website at:
+
+https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html
+
+<img src="BulletinMain.jpg" alt="drawing" width="400"/>
+
+### The Bulletin
+
+The Bulleting itself is essentially a plain text, very similar to a Business Memo.  A lot of words, legal temrs and information for many different cases.
+
+<img src="BulletinExample.jpg" alt="drawing" width="500"/>
+
+
+-------------------------------------------------------
+
+
+Buried within the Bulletin Letter there are a lot of tables which the State Department includes telling us how long people are wating to get their **Immigration VISAS**
+
+For this project we are looking for one specific table in the Bulletin. The one related to wait times for Family Aplicants. The table doesn't directly tell you how much the waiting time is, but we can estimate by seeing who they are processing now, and when did this people subnmitted their applications.  **This would give us a wait time for the people just getting processed and not necessarily for the people submitting their visa applications today.**
+
+<img src="BulletinTable.jpg" alt="drawing" width="500"/>
+
+
+
+### Description of Dataset
+
+The bulletins are published **MONTHLY** each on a different HTML webpage.
+
+The task will be to **READ ALL WEBPAGES with Bulletins**
+Then from each webpage extract the relevant table we need.
+Then we would need to tidy the table and extract the relevant data which would go into our .CSV or Dataframe for analysis.
+
+### Question we are trying to answer
+
+**How long are applicants for US Immigration VISA have to wait to get it and immigrate to this country. This analysis can be by Country and Category.  We will focus in the slowest category Brothers and Sisters of US Citizens.**
+
+
+### Packages we will use
+
+For this one I will use the package "rvest" which allows us to read and parse webpages (HTML) format
+
+
+```{r }
+rm(list = ls())
+library(tidyverse)
+library(rvest)
+
+```
+
+### User Defined Functions we will use.
+
+Function which given a MONTH and YEAR returns the URL of the Bulletin
+
+```{r }
+return_month <- function(month) {
+  return(switch(month,'january',
+          'february',
+         'march',
+         'april',
+         'may',
+         'june',
+         'july',
+         'august',
+         'september',
+         'october',
+         'november',
+         'december'))
+}
+```
+
+Let's define a function which given an URL returns the specific Table we want from the VISA Bulletin
+
+```{r }
+gen_url <- function(month,year) {
+
+  url1 <- "https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin/"
+
+  url3 <- "/visa-bulletin-for-"
+  fiscal_year <- year
+
+    if (month > 9) {
+    fiscal_year <- year + 1
+  }
+  
+  return(paste0(url1,as.character(fiscal_year),url3,return_month(month),"-",as.character(year),".html"))
+  
+}
+
+```
+
+Now a function which given a month and year extract from the WebPage (Bulletin) the table we want.
+
+```{r }
+gen_table <- function(month,year){
+  my_bulletin <- read_html(gen_url(month,year))
+  # html_table returns all tables in the page. We need number 7 from 2018, 2 for 2017 and before anf 4 for 2017 from Feb on
+  
+  if (year>2017){
+    tabnum <- 7
+  } else if(year==2017 & (month >1 & month <10)){
+    tabnum <- 4
+  } else if(year==2017 & month >= 10){
+    tabnum <- 5
+  } else {
+    tabnum <- 2
+  }
+  
+  my_table <- html_table(my_bulletin, fill=TRUE)[[tabnum]]
+  
+  #delete first row
+  my_table <- my_table %>% slice(-1)
+  
+  #rename columns
+  my_table <- my_table %>% 
+  rename(
+    fam_group = X1,
+    all_date = X2,
+    china_date = X3,
+    india_date = X4,
+    mexico_date = X5,
+    ph_date = X6)
+  
+  #Convert charatecter-dates into true dates
+  my_table[c("all_date","china_date",
+             "india_date","mexico_date","ph_date")] <-
+    lapply(my_table[c("all_date","china_date",
+             "india_date","mexico_date","ph_date")], 
+           function(x) as.Date(x, "%d%B%y"))
+  return(my_table)
+}
+```
+
+One more function that crawls a range of Bulletins (From some date to some date) and from each one, it extracts the table, looks at the desired Family Category and Country, and finally calculates the waiting **AT EACH SPECIFIC BULLETIN** published in the defined history we are looking at.
+
+```{r }
+gen_waittime_df <- function(from_m, from_y, to_m, to_y,
+                            country, category){
+  
+  #  Category	  Country	    Date	       Wait_Time
+  #    F4	      All_Other	  1/1/2018	   10000
+  
+  #create data frame with 0 rows and 4 columns
+  df <- data.frame(matrix(ncol = 4, nrow = 0))
+
+  #provide column names
+  colnames(df) <- c('cat', 'country', 'date', 'wait_time')
+
+  done <- FALSE
+  curr_month <- from_m
+  curr_year <- from_y
+  row <- 1
+  
+  while (!done){
+    bulletin_tab <- gen_table(curr_month,curr_year)
+    bull_date <- as.Date(paste0(curr_year,"-",curr_month,"-1"))
+    proc_date <- bulletin_tab[[category,country+1]]
+
+    #Wait time in YEARS
+    time_diff <- (bull_date - proc_date) / 365
+
+    df[row,] <- c(category,country,
+                  bull_date,
+                  time_diff
+                  )
+    # Now check if we reached the last month to eval
+    if (curr_month == to_m & curr_year == to_y){
+      done <- TRUE
+    } else if (curr_month == 12){
+      curr_year <- curr_year + 1
+      curr_month <- 1
+    } else {
+      curr_month <- curr_month + 1
+    }
+  row <- row + 1
+
+  }
+
+#I want the integer date to be in the normal date formal
+df$date <- as.Date(df$date, origin = "1970-1-1")
+return(df)
+}
+
+```
+
+### Let's run this and get ALL bulletins and extract their tables
+
+Now that all functions are defined, let's make a function call and crawl all bulletins in the website. From each bulletin (in HTML format) extract the desired table.
+
+Our functions are designed to generate a table from whatever **CATEGORY** we want **FROM F1=1 to F4=5**.  Also we can generate it from whatever **COUNTRY CATEGORY** we want **FROM All OTHER=1, China=2, India=3, Mexico=4 and Phillipines=5**
+
+For this project let's generate data as follows:
+
+* Time Period - Last 6 years
+* Category - F4 (Brothers and Sisters of US Citizens)
+* Country - ALL OTHER (Not India, China Mexico or Philippines)
+
+We will save it and then write to a CSV for analysis
+
+```{r }
+my_df <-gen_waittime_df(1,2016,1,2022,1,5)
+glimpse(my_df)
+```
+
+**Looks good!**
+
+Let's save it into a .CSV for further analysis later.
+
+```{r }
+write.csv(my_df,"20162018OtherF4.csv", row.names = FALSE)
+```
+
+Let's now read it for analysis
+
+```{r }
+my_csv <- read_csv("20162018OtherF4.csv")
+glimpse(my_csv)
+```
+
+
+Now let's plot the data to see how long are people in this category and Country have to wait to get their immgration VISA to the United States
+
+```{r }
+ts <- ggplot(my_csv, aes(x=date, y=wait_time)) +
+  geom_line() + 
+  ggtitle("Immigration VISA wait Times \n Cat=F4, Brothers/Sisters , ALL OTHER Countries") +
+  xlab("Bulletin Date") + ylab("Wait in YEARS")
+ts
+```
+
+Before commenting, lets also get some basic metrics of our times-series.
+
+```{r }
+my_csv %>%
+  summarise(minimum = min(wait_time), maximum = max(wait_time))
+```
+
+
+Wow the plot is really telling. The wait times for a US IMMIGRATION VISA for Brothers and Sisters of US Citizens has gone from roughly 11.7 years to 14.3 years!!
+
+Let's see if it is better for India
+
+```{r }
+my_df2 <-gen_waittime_df(1,2016,1,2022,3,5)
+
+my_df2 %>%
+  summarise(minimum = min(wait_time), maximum = max(wait_time))
+
+ts2 <- ggplot(my_df2, aes(x=date, y=wait_time)) +
+  geom_line() + 
+  ggtitle("Immigration VISA wait Times \n Cat=F4, Brothers/Sisters, INDIA") +
+  xlab("Bulletin Date") + ylab("Wait in YEARS")
+
+ts2
+
+```
+
+Wd can see here for people immigrating from India the wait is even longer. Starting at 11 years in 2016 to now people have to wait 16 years to get an immigration VISA!!!
+
+Just let's do one more for Mexico
+
+```{r }
+my_df3 <-gen_waittime_df(1,2016,1,2022,4,5)
+
+my_df3 %>%
+  summarise(minimum = min(wait_time), maximum = max(wait_time))
+
+ts3 <- ggplot(my_df3, aes(x=date, y=wait_time)) +
+  geom_line() + 
+  ggtitle("Immigration VISA wait Times \n Cat=F4, Brothers/Sisters, Mexico") +
+  xlab("Bulletin Date") + ylab("Wait in YEARS")
+
+ts3
+
+```
+
+And here we can see that even worse is Mexico. In 2016 wait time for Immigration VISA for Brothers and Sister of US Citizens was 17.5 years, now it is 22 years!
+
+
+For comparison let's do the **FASTEST CATEGORY** Sons and Daughters of US Citizens.
+
+```{r }
+my_df4 <-gen_waittime_df(1,2016,1,2022,1,1)
+
+my_df4 %>%
+  summarise(minimum = min(wait_time), maximum = max(wait_time))
+
+ts4 <- ggplot(my_df4, aes(x=date, y=wait_time)) +
+  geom_line() + 
+  ggtitle("Immigration VISA wait Times \n Cat=F1, Sons and Daughters, ALL OTHER Countries") +
+  xlab("Bulletin Date") + ylab("Wait in YEARS")
+
+ts4
+
+```
+
+We can see here that Sons and Daughters of US Citizen have a faster waiting time which has ranged from 5 years to 6.8 Years
+
+
+## Thank you!!!
