@@ -1,0 +1,132 @@
+---
+title: "Assignment 6 - XML/JSON/HTML"
+author: "Juan Falck"
+date: "March 17,2022"
+output: 
+  html_document:
+    fig_height: 3
+    fig_width: 5
+  pdf_document:
+    fig_height: 3
+    fig_width: 5
+  word_document:
+    fig_height: 3
+    fig_width: 5
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, setup, include=FALSE}
+require(mosaic)   # Load additional packages here 
+knitr::opts_chunk$set(
+  tidy=FALSE,     # display code as typed
+  size="small",
+  warning = FALSE, message = FALSE)   # slightly smaller font for code
+```
+
+## Introduction
+I have placed three files in the the three formats (XML, JSON, HTML) in a AWS S3 folder so they can be accesed directly from the internet.  Links are below:
+
+https://cuny-msds.s3.amazonaws.com/books.xml
+
+https://cuny-msds.s3.amazonaws.com/books.json
+
+https://cuny-msds.s3.amazonaws.com/books.html
+
+We will ready the files, parse them and ensure they are within an R dataframe or tibble.
+
+
+## XML to R
+
+Let's load the libraries we will use.
+
+```{r}
+rm(list=ls())
+library(tidyverse)
+library(XML)
+library(xml2)
+```
+
+Let's load the files directly from our AWS S3 folders.
+
+```{r}
+url <- "https://cuny-msds.s3.amazonaws.com/books.xml"
+data_xml <- read_xml(url)
+books_xml <- xmlParse(data_xml)
+df_books_xml <- xmlToDataFrame(nodes = getNodeSet(books_xml, "//book"))
+```
+
+Let's check the structure and look at the data
+
+```{r}
+str(df_books_xml)
+```
+
+Some numerical values were imported as character. So let's convert them to numerical
+
+```{r}
+df_books_xml$year <- as.numeric(as.character(df_books_xml$year))
+df_books_xml$amazon_price <- as.numeric(as.character(df_books_xml$amazon_price))
+str(df_books_xml)
+df_books_xml
+```
+
+Now it looks all good. Let's move on!
+
+## From json to R
+
+Let's load libraries
+
+```{r}
+library("jsonlite")
+library("rjson")
+```
+
+Let's load the data into R.
+
+```{r}
+url <- "https://cuny-msds.s3.amazonaws.com/books.json" 
+data_json <- jsonlite::fromJSON(url)
+df_json <- as.data.frame(data_json)
+```
+
+Let's check the structure
+
+```{r}
+str(df_json)
+df_json
+```
+
+All looks good! let's continue.
+
+## HTML to R
+
+We will use the rvest library to load HTML into R.
+
+```{r}
+library(rvest)
+```
+
+Load the data from the S3 folder in our AWS account
+
+```{r}
+url <- "https://cuny-msds.s3.amazonaws.com/books.html"
+data_html <- read_html(url)
+table_html <- html_table(data_html, fill=TRUE)[[1]]
+```
+
+
+Let's check the structure and look at the table
+
+```{r}
+str(table_html)
+table_html
+```
+
+All looks good, we are done!
+
+```{r}
+```
+
+
+## Thank you!
