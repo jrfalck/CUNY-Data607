@@ -1,0 +1,134 @@
+---
+title: "Data607- Assignment Week 9"
+author: "Juan Falck"
+date: "March 26, 2022"
+output: 
+  html_document:
+    fig_height: 3
+    fig_width: 5
+  pdf_document:
+    fig_height: 3
+    fig_width: 5
+  word_document:
+    fig_height: 3
+    fig_width: 5
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, setup, include=FALSE}
+require(mosaic)   # Load additional packages here 
+knitr::opts_chunk$set(
+  tidy=FALSE,     # display code as typed
+  size="small")   # slightly smaller font for code
+```
+
+# NY Times Web API
+
+## Introduction
+The New York Times offers a standardized way for people to search their database of articles under different criteria. This API allows for user to embedd within their code the proper calls to pull the information they need.
+
+## Signup Process and Personal API Key
+To access their data through their API, the NY Times requires every user to register and request a unique **KEY** 
+The process also required to enable the KEY for each of the different categories of data the NY Times offers.  In my case for this assigment I enabled **most popular articles**.
+
+Let's go ahead and initialize our packages and our assigned API Key.
+
+```{r }
+library(httr)
+library("jsonlite")
+library("rjson")
+library("rvest")
+rm(list = ls())
+```
+
+Now let's initialize our personal key.
+
+```{r }
+# My personal key
+my_api_key <- "Aoc02FjJ8N3rShPDaZXD05UAcEFtpQMO"
+```
+
+# Accesing Data through the API
+
+## Setting things up to use the WEB API
+We decided to use the API for the **MOST POPULAR ARTICLES**.  We will test using the **MOST VIEWED ARTICLES**.  This part of the API gives us the flexibility to access the most viewed articles in the last **1**, **7** and **30** days.
+
+Let's start by accesing the most viewed articles in the last 7 days.
+
+We will contruct the proper **URL** as per NY Times API specs. 
+
+```{r }
+# Can be 1, 7, or 30
+my_period <- 7
+
+times_url_p1 <- "https://api.nytimes.com/svc/mostpopular/v2/viewed/"
+
+time_url_p2 <- ".json?api-key="
+
+my_times_url <- paste0(times_url_p1,my_period,time_url_p2,my_api_key)
+my_times_url
+```
+
+We checked the **URL** and it looks well constructed. So far so good.
+
+## Testing API Calls to access data
+We will use the **GET** command to test there are no issues with our API calls and all is properly set.
+
+```{r }
+most_popular1 <- GET(my_times_url)
+str(most_popular1)
+headers(most_popular1)
+```
+
+Based on the the output of the **GET** command, all seems fine and we can continue.
+
+## Making an API Call to access the 7 most viewed articles
+To pull the articles we will use the **jsonlite** package and the **fromJSON** function.
+Also we will use the **as.data.frame** function to convert the pulled data into a neat **dataframe**
+
+
+```{r }
+data_json <- jsonlite::fromJSON(my_times_url, flatten = TRUE)
+df_json <- as.data.frame(data_json)
+```
+
+The dataframe is quite large for easy printing. I suggest to use **View** command within **RStudio** where you can check the datframe. 
+
+For this assignment, let's list all **columns** to check all columns as per specs well pulled correctly.
+
+```{r }
+colnames(df_json)
+```
+
+The **colnames** call prints all columns name and we can check they all match the specs of the API.
+
+
+# Viewing pulled data
+The data as explained before is not for easy printing, but we can check some of the fields to make sure everything is fine.
+
+## View links to most viewed articles
+
+```{r }
+df_json %>%
+    select(results.url)
+```
+
+
+## View Sections for the most viewed articles
+
+```{r }
+df_json %>%
+    select(results.section)
+```
+
+## View Key Words for the most viewed articles
+
+```{r }
+df_json %>%
+    select(results.adx_keywords) %>%
+  head()
+```
+
+
+# Thank you!
