@@ -1,0 +1,465 @@
+---
+title: "Data 607 - Week 10 NLP"
+author: "Juan Falck"
+date: "4/10/2022"
+output: 
+  html_document:
+    fig_height: 4
+    fig_width: 6
+  pdf_document:
+    fig_height: 4
+    fig_width: 6
+  word_document:
+    fig_height: 3
+    fig_width: 5
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, setup, include=FALSE}
+require(mosaic)   # Load additional packages here 
+knitr::opts_chunk$set(
+  tidy=FALSE,     # display code as typed
+  size="small")   # slightly smaller font for code
+```
+
+## General Setup
+
+### Summary of approach for this assignment
+
+The approach to extend the code from the Chapter will be:
+
+1. Get code working as per chapter with the included Lexicon in **TIDY** and the provided Corpus from **Jane Austen**
+
+2. Load the **lexicon** R library and use a few of their included lexicons
+
+3. Load in cloud server a few books in .TXT format which we will use as the Corpus to analyze.
+
+For this assignment we will use **"The Scarlet Letter"**, BUT we also downloaded and tested **"War and Peace", "Ulysses" and "The Great Gatsby"**
+
+
+### Libraries to use
+
+```{r, message=FALSE, warning=FALSE}
+rm(list=ls())
+library(janeaustenr)
+library(tidytext)
+library(tidyverse)
+#library(dplyr)
+#library(stringr)
+#library(tidyr)
+#library(ggplot2)
+```
+
+
+### Lexicons Included in Tidy
+
+We will take a look at the 3 Lexicons included in Tidy:
+
+1. Afinn
+2. Bing
+3. NRC
+
+```{r}
+head(get_sentiments("afinn"))
+```
+
+```{r}
+head(get_sentiments("bing"))
+```
+
+```{r}
+head(get_sentiments("nrc"))
+```
+
+The three offer a somewhat different approach to rate a words and its sentiment. We need to consider each one's range of options when analyzing data.
+
+## Sentiment Analysis
+
+### Let's process Jane Austen Books
+
+Let's do some basic "tyding" on the corpuses from Jane Austen Books. Last step is to "tokenize" each word in the corpus.
+
+```{r}
+tidy_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, 
+                                regex("^chapter [\\divxlc]", 
+                                      ignore_case = TRUE)))) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+```
+
+
+### NEW Custom Lexicon and Corpus
+
+We will use the R Package **lexicon** from Tyle Rinker at https://github.com/trinker/lexicon
+
+```{r}
+library(lexicon)
+# available_data('English')
+```
+
+
+We have uploaded a few books in our server in the cloud.
+
+* Ulysses
+* The Great Gatsby
+* Scarlet Letter
+* War and Peace
+
+**For this assignment we will use Scarlet Letter**
+
+First we define URL's and available .txt in our server
+
+```{r}
+url_1 <- "http://3.86.40.38/data607/"
+url_2a <- "scarlet.txt"
+url_2b <- "gatsby.txt"
+url_2c <- "ulysses.txt"
+url_2d <- "warandpeace.txt"
+
+#We will start with Scarlet Letter
+url12 <- paste0(url_1,url_2a)
+
+```
+
+
+Let's read in the selected book and convert it into Tidy format and Dataframe.
+
+```{r}
+corpus_txt <- read_lines(url12)
+numberoflines <- length(read_lines(url12))
+
+corpus_df <- tibble(line = 1:numberoflines, text = corpus_txt)
+
+```
+
+```{r}
+tidy_corpus <- corpus_df %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, 
+                                regex("^chapter [\\divxlc]", 
+                                      ignore_case = TRUE)))) %>%
+  unnest_tokens(word, text)
+```
+
+
+### New Corpus Sentiment using BING
+
+Let's test the new corpus using the standard **BING** lexicon
+
+```{r}
+corpus_sentiment <- tidy_corpus %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+```
+
+Let's plot the results
+
+```{r}
+library(ggplot2)
+
+ggplot(corpus_sentiment, aes(index, sentiment)) +
+  geom_col(show.legend = FALSE) 
+```
+
+
+### Some Basic analysis of NEW Corpus
+
+Now lets use the nrc sentiment data set to assess the different sentiments that are represented across the selected new Corpus.
+
+```{r}
+tidy_corpus %>%
+        right_join(get_sentiments("nrc")) %>%
+        filter(!is.na(sentiment)) %>%
+        count(sentiment, sort = TRUE)
+```
+
+
+### New Lexicon from R package Lexicon
+
+Let's take a look at the Lexicon provided in the **Lexicon** package. It offers a few lexicons with words rated for sentiment.
+
+```{r}
+#-1 OR +1
+head(hash_sentiment_huliu)
+# head(hash_sentiment_nrc)
+
+# From -1 to +1 in decimals
+# head(hash_sentiment_senticnet)
+#head(hash_sentiment_sentiword)
+head(hash_sentiment_jockers)
+```
+
+As you can see from before, the lexicons as divided into two categories: One for lexicons which rate words simply into -1 or +1 AND lexicons which give an exact rating **between** -1 and +1 in decimals.
+
+For this excercise we will use **hash_sentiment_huliu** for comparisons to other lexicons that also have only **positive** or **negative** line **BINNG**.  
+
+We will use **hash_sentiment_jockers** for comparisons to **AFFIN** which have a scale of ratings for sentiment
+
+
+```{r}
+hash_words_Scale <- hash_sentiment_jockers %>%
+    rename(word = x, sentiment = y)
+```
+
+```{r}
+hash_words_PosNeg <- hash_sentiment_huliu %>%
+    rename(word = x, sentiment = y) %>%
+    mutate(sentiment = replace(sentiment, sentiment == 1, "positive")) %>%
+  mutate(sentiment = replace(sentiment, sentiment == -1, "negative"))
+```
+
+### Basic analysis of new Lexicons
+
+Let's take a look at the **joker** lexicon using the new corpus.
+
+```{r}
+joker_word_counts <- tidy_corpus %>%
+  inner_join(hash_words_Scale) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+joker_word_counts
+```
+
+Let's take a look at the **huliu** lexicon using the new corpus.
+
+```{r}
+huliu_word_counts <- tidy_corpus %>%
+  inner_join(hash_words_PosNeg) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+huliu_word_counts
+```
+
+
+### Sentiment analysis of New corpus with BING
+
+```{r}
+newcorpus_sentiment <- tidy_corpus %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+```
+
+```{r}
+ggplot(newcorpus_sentiment, aes(index, sentiment)) +
+  geom_col(show.legend = FALSE)
+```
+
+
+### Sentiment analysis of New corpus with HULIU
+
+```{r}
+newcorpus_sentiment <- tidy_corpus %>%
+  inner_join(hash_words_PosNeg) %>%
+  count(index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+```
+
+```{r}
+ggplot(newcorpus_sentiment, aes(index, sentiment)) +
+  geom_col(show.legend = FALSE)
+```
+
+What we could see is that the results were very similar, in fact the difference between plots is very small still exists, so I would suspect either of the lexicons used the other as a basis.
+
+### Sentiment analysis Jane Austen "Pride and Prejudice" corpus and all Lexicons
+
+```{r}
+pride_prejudice <- tidy_books %>% 
+  filter(book == "Pride & Prejudice")
+
+```
+
+
+```{r}
+afinn <- pride_prejudice %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(index = linenumber %/% 80) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+
+bing_and_nrc <- bind_rows(
+  pride_prejudice %>% 
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  pride_prejudice %>% 
+    inner_join(get_sentiments("nrc") %>% 
+                 filter(sentiment %in% c("positive", 
+                                         "negative"))
+    ) %>%
+    mutate(method = "NRC")) %>%
+  count(method, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+
+huliu <- pride_prejudice %>%
+  inner_join(hash_words_PosNeg) %>%
+  count(index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative, method="HULIU")
+
+
+joker <- pride_prejudice %>% 
+  inner_join(hash_words_Scale) %>% 
+  group_by(index = linenumber %/% 80) %>% 
+  summarise(sentiment = sum(sentiment)) %>% 
+  mutate(method = "JOKER")
+
+```
+
+
+Let's plot the whole thing now.
+
+```{r, fig.width=7,fig.height=6}
+bind_rows(afinn, 
+          bing_and_nrc,joker,huliu) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+
+
+
+### Sentiment Analsysis NEW corpus with all Lexicons
+
+```{r}
+afinn <- tidy_corpus %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(index = linenumber %/% 80) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+
+bing_and_nrc <- bind_rows(
+  tidy_corpus %>% 
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  tidy_corpus %>% 
+    inner_join(get_sentiments("nrc") %>% 
+                 filter(sentiment %in% c("positive", 
+                                         "negative"))
+    ) %>%
+    mutate(method = "NRC")) %>%
+  count(method, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+
+huliu <- tidy_corpus %>%
+  inner_join(hash_words_PosNeg) %>%
+  count(index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative, method="HULIU")
+
+
+joker <- tidy_corpus %>% 
+  inner_join(hash_words_Scale) %>% 
+  group_by(index = linenumber %/% 80) %>% 
+  summarise(sentiment = sum(sentiment)) %>% 
+  mutate(method = "JOKER")
+
+```
+
+
+Let's plot the whole thing now.
+
+```{r, fig.width=7,fig.height=6}
+bind_rows(afinn, 
+          bing_and_nrc,joker,huliu) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+
+
+## Other Analysis
+
+### Most Common Positive and Negative words
+
+Let's check JOKER
+
+```{r}
+joker_word_counts <- tidy_corpus %>%
+  inner_join(hash_words_Scale) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+```
+
+```{r, fig.width=7,fig.height=6}
+joker_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+Let's check HULIU
+
+```{r}
+huliu_word_counts <- tidy_corpus %>%
+  inner_join(hash_words_PosNeg) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+```
+
+
+```{r}
+huliu_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+### Wordcloud
+
+```{r, message=FALSE, warning=FALSE, fig.width=6,fig.height=7}
+library(wordcloud)
+
+tidy_corpus %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+```
+
+### Comparison Cloud
+
+```{r, message=FALSE, warning=FALSE,fig.width=6,fig.height=7}
+library(reshape2)
+
+tidy_corpus %>%
+  inner_join(hash_words_PosNeg) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("gray20", "gray80"),
+                   max.words = 100)
+```
+
