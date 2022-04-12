@@ -1,0 +1,78 @@
+---
+title: "Assignment Week 11 - Recommender System"
+author: "Juan Falck"
+date: "April 11, 2022"
+output: 
+  html_document:
+    fig_height: 3
+    fig_width: 5
+  pdf_document:
+    fig_height: 3
+    fig_width: 5
+  word_document:
+    fig_height: 3
+    fig_width: 5
+---
+
+```{r, setup, include=FALSE}
+require(mosaic)   # Load additional packages here 
+knitr::opts_chunk$set(
+  tidy=FALSE,     # display code as typed
+  size="small")   # slightly smaller font for code
+```
+
+## Wine.Com
+
+<img src="picture1.png" alt="drawing" width="500"/>
+
+Wine.Com is one if not the most important online seller of Wine products.  It offers a very extensive worldwide selection and has specific offerings of wines for each state in the United States. This is to comply with State laws regulating the sales of alcohol products.
+
+
+### Recommender System
+
+I found that its recommender system falls into 3 different type of recommendations for wines.
+
+* Based on specific wines viewed
+* Based on popular wines sold in my location
+* Based on the specific varietal (type of grape) I have viewed (For example Reds, Whites, etc.)
+
+**See below the screens I found during my most recent visit to the site, and the places I found recommendations for me.**
+
+<img src="picture2.png" alt="drawing" width="400"/>
+
+<img src="picture3.png" alt="drawing" width="400"/>
+
+<img src="picture4.png" alt="drawing" width="400"/>
+
+
+### Main questions to answer
+
+**1. Who are the target users**
+
+People who want the best things in life :)  Wine.com offers very detailed tools to find any type of wine. I'd say that it caters to two types of customers:
+
+1.1 People who know a lot about wines and can search for a specific one and understand the lingo and data around all wines. If you don't know about wines the system may seem at times overwhelm and information provide may not seem usefull.
+
+
+1.2 People who don't know much about wines, but like to drink them and basically look for and easy way to find something safe to order and have relative confidence it will be an ok purchase.
+
+
+**2. What are the key goals?**
+
+2.1 Maximize sales.  By guessing at what type of wines the person is looking for, it can suggest things which can help the potential buyer to accelerate its decision to purchase a wine bottle (or case) (or cases)
+
+2.2 Maximize customer's experience.  Any site can sell one bottle of wine...once.  By estimating what the customer may enjoy it will ensure that people find their purchases to provide the highest satisfaction for the money spent.
+
+**3. How can we help accomplish those goals**
+
+3.1 I would add a category based on actual purchases (not viewings), most importantly repeated purchases which would signal and actual hit.  Each wine in this category would have very specific attributes related to **flavor** which would allow the recommender system to recommend similar wines with similar **flavor**.
+
+3.2 Have a tool where customers can answer a survey about **general taste preferences** For example if they have to choose a fruit juice, which one would they prefer orange or apple? Based on the response of several of this type of questions, we could build a list of wines which we believe the customer may enjoy just on flavor alone.
+
+3.3 Have a tool which asks the customers what features are important to them and in which order of priority. For example price, expert ratings, varietal, regional origin, customer reviews, popularity.  These are not specific to any wine, but allows the recommender to provide an alternative to recommender wines which meet **other criteria** that may also enhance customer's satisfaction
+
+## Enjoy!
+
+This is the wine I am drinking tonight (4/11/2022). Beautiful Pinot Noir from **New Zeland!**  **Cheers!**
+
+<img src="picture5.jpg" alt="drawing" width="400"/>
