@@ -1,0 +1,545 @@
+---
+title: "Data 607 - Project 4"
+author: "Juan Falck"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    theme: cerulean
+  pdf_document:
+    toc: yes
+---
+
+```{r load-packages, message=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(tidytext)
+library(textrecipes)
+library(vip)
+```
+
+```{r}
+# Some initialization
+#setwd("./Data607_Project4")
+rm(list = ls())
+path_ham <- "./easy_ham"
+path_spam <- "./spam_2"
+path_hamhard <- "./hard_ham"
+myseed <- 8888
+```
+
+
+# Introduction to Project 4
+
+It can be useful to be able to classify new "test" documents using already classified "training" documents.  A common example is using a corpus of labeled spam and ham (non-spam) e-mails to predict whether or not a new document is spam.  
+
+For this project, you can start with a spam/ham dataset, then predict the class of new documents (either withheld from the training dataset or from another source such as your own spam folder).   One example corpus:   https://spamassassin.apache.org/old/publiccorpus/
+
+# General approach for this project
+
+For this project we will divide the tasks as follows
+
+1. Read email data from downloaded folders
+
+2. First analysis will be using the **EASY HAM** data set
+
+3. Easy Ham emails will be merged with **SPAM** emails into a single data frame
+
+4. Some basic exploratory analysis to see some characteristics of the data
+
+5. Using **TIDYMODELS** we will develop the following steps.
+
+5.1 Process the data using **RECIPESS**. The process will cleanup the data and **TOKENIZE** it. Also it will separate the data between **testing** and **training**
+
+5.2 Define a **LASSO Regression** as a classifier to separate **SPAM** from **HAM**
+
+5.3 Deine a **WORKFLOW** to blend the recipe and the regression into a single object.
+
+5.4 Tune the model parameters for optimal results
+Run performance metrics to see how our model performed.
+
+5.5 Repeat all steps now using the **Hard Ham** dataset.
+
+# Load and process data
+
+## Read the data
+
+We have three folders where the different emails are stored.  First step is to read the filenames all the files in each folder.  This will be the list we will later read and process.
+
+```{r}
+ham_files_ls = list.files(path=path_ham)
+spam_files_ls = list.files(path=path_spam)
+hamhard_files_ls = list.files(path=path_hamhard)
+
+# Here we use lapply to ready each file from the list.
+ham_files_df <- lapply(ham_files_ls, function(x) {read_file(file = paste0(path_ham,"/",x))})
+spam_files_df <- lapply(spam_files_ls, function(x) {read_file(file = paste0(path_spam,"/",x))})
+
+hamhard_files_df <- lapply(hamhard_files_ls, function(x) {read_file(file = paste0(path_hamhard,"/",x))})
+```
+
+
+## Process data to merge into a single data frame
+
+### Easy Ham emails
+
+For this steps we will cobine the **SPAM** emails withe two types of **HAM** emails, to create two dataframes. One for **HARD HAM** and the other for **EASY HAM**.
+
+```{r}
+# Combine them
+combined_ham_df <- do.call("rbind", lapply(ham_files_df, as_tibble))
+
+combined_spam_df <- do.call("rbind", lapply(spam_files_df, as_tibble))
+
+combined_hamhard_df <- do.call("rbind", lapply(hamhard_files_df, as_tibble))
+
+# Add files names as column id.
+combined_ham_df$fileid <- ham_files_ls
+combined_spam_df$fileid <- spam_files_ls
+combined_hamhard_df$fileid <- hamhard_files_ls
+```
+
+
+```{r}
+#add a SPAM HAM indicator column to each
+combined_ham2_df <- combined_ham_df %>%
+  mutate(type="ham")
+```
+
+```{r}
+combined_spam2_df <- combined_spam_df %>%
+  mutate(type="spam")
+```
+
+```{r}
+combined_hamhard2_df <- combined_hamhard_df %>%
+  mutate(type="ham")
+```
+
+
+```{r}
+# Merge the two dataframes into a single one_of
+
+#put all data frames into list
+df_list <- list(combined_ham2_df, combined_spam2_df)      
+
+#merge all data frames together
+all_emails_df <- df_list %>% reduce(full_join)
+# head(all_emails_df)
+
+```
+
+
+### Hard HAM emails
+
+We will do now for the **hard ham** emails.
+
+```{r}
+# Let's do it fo hard ham set
+dfhard_list <- list(combined_hamhard2_df, combined_spam2_df)      
+
+all_emailshard_df <- dfhard_list %>% reduce(full_join)
+# head(all_emailshard_df)
+
+```
+
+At this point we have two dataframes. **all_emails_df** which has the **spam and easy ham** emails.  **all_emailshard_df** has the **spam and hard ham** emails.
+
+
+## Exploratory Data Analysis
+
+Let's do some basic counting of the emails we will analyze.
+
+```{r}
+# Lets count them
+
+all_emails_df %>% 
+  group_by(type) %>% 
+  summarize(messages  = n())
+
+```
+
+We have almost 4,000 emails and the split ham and spam is pretty even, so we have a fairly balanced data set.
+
+```{r}
+words_per_review <- all_emails_df %>%
+  tidytext::unnest_tokens(word, value)%>%
+  count(fileid, name = "total_words")
+
+words_per_review %>%
+  ggplot(aes(total_words)) +
+  geom_histogram(fill = "midnightblue", alpha = 0.8,bins = 60)
+
+words_per_review %>%
+  ggplot(aes(total_words)) +
+  geom_histogram(fill = "midnightblue", alpha = 0.8,bins = 60) +
+  scale_x_log10()
+
+```
+
+A histogram show that number of words is very skewed toward smaller number of words per email, but we also see a few very long emails.  
+
+If we plot the histogram using a **logarithmic** scale, we can appreciate better how email are more concentreated towards 200 words per email, but we can some emails with over 10,000 words.
+
+
+# Build the models for EASY HAM
+
+We will **TWO MODELS** to sea how they perform with the easy and hard ham data.
+
+
+## Split training and testing data
+
+First we will divide the data into **training** and **testing**.  We will train the data using only training data, we will optimize using only training data, and we done, we will see how it performs with test data.
+
+First let's do some adjustments to data using some **REGEX**
+
+```{r}
+all_emails_df <- all_emails_df %>%
+  mutate(value= str_remove_all(value, pattern = "<.*?>")) %>%
+  mutate(value = str_remove_all(value, pattern = "[:digit:]")) %>%
+  mutate(value = str_remove_all(value, pattern = "[:punct:]")) %>%
+  mutate(value = str_remove_all(value, pattern = "[\n]")) %>%
+  mutate(value = str_to_lower(value))
+```
+
+Now we do some basic split of training and test data
+
+```{r}
+set.seed(myseed)
+emails_split <- initial_split(all_emails_df)
+emails_train <- training(emails_split)
+emails_test <- testing(emails_split)
+```
+
+
+## Process data to get it ready for the model
+
+We will make us of **TidyModels RECIPES** to setup a recipe that will process the emails and convert into **tokens** so we can perform some regression.
+
+```{r}
+## Pre-process with RECIPES
+emails_recipe <- recipe(type ~ value, data = all_emails_df) %>%
+  step_tokenize(value) %>%
+  step_stopwords(value) %>%
+  step_tokenfilter(value, max_tokens = 500) %>%
+  step_tfidf(value) %>%
+  step_normalize(all_predictors())
+
+emails_prep <- prep(emails_recipe)
+
+emails_prep
+
+```
+
+## Define the Lasso logistic regression
+
+We will use **lasso** regression which allows to do some regularization by adding a **penalty** lambda parameter.  We will use the **tune()** function in Tidymodels so we can tune the model to find the optimal lambda parameter by trying several and see which one performs better on the training data.
+
+```{r}
+##### Logistic regression
+emails_log_reg <- logistic_reg(penalty = tune(), mixture = 1) %>%
+  set_engine("glmnet")
+
+logistic_workflow <- workflow() %>%
+  add_recipe(emails_recipe) %>%
+  add_model(emails_log_reg)
+
+logistic_workflow
+
+```
+
+## Define TUNE parameters to optimize
+
+This function in tidymodels creates a list of potential value for Lambda that we can use to train and compare our model.
+
+```{r}
+### Tune regression parameters
+#####
+set.seed(myseed)
+lambda_grid <- grid_regular(penalty(), levels = 20)
+
+## We will use bootstrapping to training our model
+email_folds <- bootstraps(emails_train, strata = type)
+email_folds
+
+```
+
+## Train the model and tune it
+
+Here we train our model using several parameters por **lambda**. We will mesure the performance of the model after each and will later test the model with lambda parameter which gave us the best result during training.
+
+```{r}
+set.seed(myseed)
+doParallel::registerDoParallel()
+
+regression_grid <- tune_grid(
+  logistic_workflow,
+  resamples = email_folds,
+  grid = lambda_grid,
+  metrics = metric_set(roc_auc, ppv, npv, precision, recall, f_meas)
+)
+
+```
+
+
+## Review training metrics
+
+We will plot how our model performs under several commong perfomance metrics like ROC-AUC, F1 score, recall, sensitivity, negative predictive value (npv), positive predictive value (ppv)
+
+```{r}
+regression_grid %>%
+  collect_metrics()
+
+```
+
+```{r}
+regression_grid %>%
+  collect_metrics() %>%
+  ggplot(aes(penalty, mean, color = .metric)) +
+  geom_line(size = 1.5, show.legend = FALSE) +
+  facet_wrap(~.metric) +
+  scale_x_log10()
+
+```
+
+
+## Select Best parameters from the tuning
+
+We will use **roc-auc** as the performance metric. We could've use other like **F1**
+
+```{r}
+best_auc <- regression_grid %>%
+  select_best("roc_auc")
+
+best_auc
+
+####
+best_f <- regression_grid %>%
+  select_best("f_meas")
+
+best_f
+
+
+```
+
+## Finalize model optimization
+
+Here we test our model with the **test** data and we will collect metrics to measure performance.
+
+```{r}
+# Finalize Model
+# 
+final_regression <- finalize_workflow(logistic_workflow, best_auc)
+
+final_regression
+
+```
+
+```{r}
+emails_final <- last_fit(final_regression, emails_split)
+
+emails_final %>%
+  collect_metrics()
+
+```
+
+## Review results
+
+**How did we do with unseen test data**
+
+```{r}
+emails_final %>%
+  collect_predictions() %>%
+  conf_mat(type, .pred_class)
+
+```
+
+Not bad at all **99.5% accuracy** and **99.99 ROC-AUC**.
+Out of almost 1,000 emails, we only misclassified **5**
+
+Let's use the VIP package to mesure the importance or words to classify an email positively or negatively.  It is not apparent why some of the words are importan though.
+
+```{r}
+extract_fit_engine(emails_final) %>%
+  vi(lambda = best_f$penalty) %>%
+  group_by(Sign) %>%
+  top_n(20, wt = abs(Importance)) %>%
+  ungroup() %>%
+  mutate(
+    Importance = abs(Importance),
+    Variable = str_remove(Variable, "tfidf_value_"),
+    Variable = fct_reorder(Variable, Importance)
+  ) %>%
+  ggplot(aes(x = Importance, y = Variable, fill = Sign)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~Sign, scales = "free_y") +
+  labs(y = NULL)
+```
+
+
+# Build the models for HARD HAM
+
+**Let's see how the model performs with HARD HAM**
+
+## Split data for training and testing
+
+Same as before, we will split data into testing and traing using the **HARD HAM** dataset.
+
+```{r}
+all_emailshard_df <- all_emailshard_df %>%
+  mutate(value= str_remove_all(value, pattern = "<.*?>")) %>%
+  mutate(value = str_remove_all(value, pattern = "[:digit:]")) %>%
+  mutate(value = str_remove_all(value, pattern = "[:punct:]")) %>%
+  mutate(value = str_remove_all(value, pattern = "[\n]")) %>%
+  mutate(value = str_to_lower(value))
+```
+
+
+```{r}
+set.seed(myseed)
+emails_split <- initial_split(all_emailshard_df)
+emails_train <- training(emails_split)
+emails_test <- testing(emails_split)
+```
+
+
+## Process data to get it ready for the Model
+
+Same as before we will use **RECIPES** to tokenize our emails.
+
+```{r}
+## Pre-process with RECIPES
+emails_recipe <- recipe(type ~ value, data = all_emails_df) %>%
+  step_tokenize(value) %>%
+  step_stopwords(value) %>%
+  step_tokenfilter(value, max_tokens = 500) %>%
+  step_tfidf(value) %>%
+  step_normalize(all_predictors())
+
+emails_prep <- prep(emails_recipe)
+
+emails_prep
+
+```
+
+## Define the Lasso Logistic Regression
+
+Same regression model as before, using **lasso** but time we want to see how good it does it with **hard ham**.
+
+
+```{r}
+##### Logistic regression
+emails_log_reg <- logistic_reg(penalty = tune(), mixture = 1) %>%
+  set_engine("glmnet")
+
+logistic_workflow <- workflow() %>%
+  add_recipe(emails_recipe) %>%
+  add_model(emails_log_reg)
+
+logistic_workflow
+
+```
+
+## Tune up the Model
+
+```{r}
+### Tune regression parameters
+#####
+set.seed(myseed)
+lambda_grid <- grid_regular(penalty(), levels = 20)
+
+email_folds <- bootstraps(emails_train, strata = type)
+email_folds
+
+```
+
+```{r}
+set.seed(myseed)
+regression_grid <- tune_grid(
+  logistic_workflow,
+  resamples = email_folds,
+  grid = lambda_grid,
+  metrics = metric_set(roc_auc, ppv, npv, precision, recall, f_meas)
+)
+
+```
+
+## Review outcomes from the tuning
+
+```{r}
+regression_grid %>%
+  collect_metrics()
+
+##################
+regression_grid %>%
+  collect_metrics() %>%
+  ggplot(aes(penalty, mean, color = .metric)) +
+  geom_line(size = 1.5, show.legend = FALSE) +
+  facet_wrap(~.metric) +
+  scale_x_log10()
+
+```
+
+```{r}
+best_auc <- regression_grid %>%
+  select_best("roc_auc")
+
+best_auc
+
+####
+best_f <- regression_grid %>%
+  select_best("f_meas")
+
+best_f
+
+```
+
+## Finalize model with optimal parameters
+
+```{r}
+# Finalize Model
+# 
+final_regression <- finalize_workflow(logistic_workflow, best_auc)
+
+final_regression
+
+```
+
+## Review results of the testing
+
+**How did we do this time with HARD HAM?**
+
+```{r}
+emails_final <- last_fit(final_regression, emails_split)
+
+emails_final %>%
+  collect_metrics()
+
+```
+
+
+```{r}
+emails_final %>%
+  collect_predictions() %>%
+  conf_mat(type, .pred_class)
+
+```
+
+Still not bad!  **ACCURACY was 96.6% and ROC-AUC 98%** not bad at all.
+
+Because the number of **Hard Ham** email was smaller, I would like to see how my model did only classifying **hard ham emails**.  We see that them model classified correctly **83%** even the hard ham emails.  Pretty goo I'd say.
+
+# Project Summary
+
+We saw a simplete logistic regression can be used to classify emails as long as we have a sufficient large **labelled dataset**.
+
+**TIDYMODELS** is awesome.  It provide a structured way to approach any problem, and essentially guides us through the different steps providing excellent and consistent tools to approach any problem.
+
+**For my final project I will use something similar but I will try many other models like Neural networks, Random Forest and KNN to see and compare how they perform with the data.
+
+
+
+**THANK YOU!!!**
