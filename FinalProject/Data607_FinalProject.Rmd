@@ -1,0 +1,606 @@
+---
+title: "Data607 - Final Project - IMDB Movie Reviews"
+author: "Juan Falck"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    theme: cerulean
+  pdf_document:
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width = 8, fig.height = 5)
+```
+
+
+# Intro
+The objective of this project was to use a fairly large dataset (IMDB Movie Reviews) which has 50,000 movie review and define the best sentiment classifier of their reviews.
+
+The goal is not really to get into the review themselves, but to test two things:
+
+1. Tidymodels and run several models comparing the for **accuracy** and **execution time**
+
+2. Keras models for Deep Neural Networks.  Unfortunately I found Tidymodels limited with Neural Network, so I did some modelling using Keras which gave more flexbility on model design and also made use of my **GPU** which greatly accelerated execution time.
+
+
+# Initialization
+
+Let's load libraries we will use.
+
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(tidymodels)
+library(tidytext)
+library(textrecipes)
+library(skimr)
+```
+
+```{r}
+# setwd("./Data607_FinalProject")
+```
+
+
+# Load and Process Data
+
+The complete dataset is 50,000 records. Since we will tokenize the data and turn words into columns with 500 columns, the dataset of 50,000 x 500 proved to be to large for some algorithms.  For the stacking excercise we will use a subset of 20,000 (random forest still ran for 1.3 days with 20,000 records)
+
+```{r}
+imdb_df <- readr::read_csv("IMDB_dataset.csv")
+set.seed(888)
+imdb_df <- sample_n(imdb_df, 20000)
+```
+
+
+```{r}
+skimr::skim(imdb_df)
+```
+
+There are exactly 1/2 positive and half negative reviews.
+
+```{r}
+table(imdb_df$sentiment)
+```
+
+Let's add an ID field which will helop some of the plots we will use to visualize data.
+
+```{r}
+imdb_df <- tibble::rowid_to_column(imdb_df, "ID")
+```
+
+At this point data is 20,000 x 3 
+
+```{r}
+dim(imdb_df)
+```
+
+
+Let's see how many words per review.
+
+```{r}
+words_per_review <- imdb_df %>%
+  tidytext::unnest_tokens(word, review)%>%
+  count(ID,name = "total_words")
+
+words_per_review %>%
+  ggplot(aes(total_words)) +
+  geom_histogram(fill= "lightblue",bins = 60)
+
+words_per_review %>%
+  ggplot(aes(total_words)) +
+  geom_histogram(fill = "lightblue",bins = 60) +
+  scale_x_log10()
+
+```
+
+Most reviews are around 200 words, with some reviews reaching 1,000 words.
+
+
+Here we will do some text manipulation and remove digits, puntuations characters.
+
+```{r}
+imdb_df <- imdb_df %>%
+  mutate(review = str_remove_all(review, pattern = "<.*?>")) %>%
+  mutate(review = str_remove_all(review, pattern = "[:digit:]")) %>%
+  mutate(review = str_remove_all(review, pattern = "[:punct:]")) %>%
+  mutate(review = str_remove_all(review, pattern = "[\n]")) %>%
+  mutate(review = str_to_lower(review))
+```
+
+# Prepare data for Machine Learning processing
+
+Let's use tidymodels to split data in **testing** and **training.
+
+```{r}
+set.seed(888)
+reviews_split <- initial_split(imdb_df)
+reviews_train <- training(reviews_split)
+reviews_test <- testing(reviews_split)
+```
+
+
+Now let's use Tidymodels recipes.  This will tokenize the dataset, remove stopwords, use TDIF for the columns and normalize values.
+
+```{r}
+## Pre-process with RECIPES
+## If you are loading a saved RDS file from a Trained model, you don't need to run the Recipe below. All you need is to run the splits above
+
+reviews_recipe <- recipe(sentiment ~ review, data = reviews_train) %>%
+  step_tokenize(review) %>%
+  step_stopwords(review) %>%
+  step_tokenfilter(review, max_tokens = 500) %>%
+  step_tfidf(review) %>%
+  step_normalize(all_predictors())
+
+reviews_prep <- prep(reviews_recipe)
+reviews_prep
+
+```
+
+
+Save processed file to be used for Keras Neural Networks models laters
+
+```{r}
+# We will save a data frame from the PREP to use later with another algo
+reviews_baked <- bake(reviews_prep,new_data = NULL)
+# head(reviews_baked)
+write.csv(reviews_baked,"reviews_baked.csv", row.names = FALSE)
+
+```
+
+```{r}
+dim(reviews_baked)
+```
+
+The first columns is the outcome variable (positive or negative). The other 500 columns are tokens using TDIF values.
+
+
+Here we define **crossvalidation** and use **10 folds**
+
+```{r}
+## Cross Validation Split of Training Data
+set.seed(888)
+reviews_folds <- vfold_cv(
+  data = reviews_train, 
+  v = 10
+  ) 
+
+reviews_folds
+```
+
+
+
+# Tidymodels
+
+We will use **TIDYMODELS** to stack several models using **workflow sets**
+We will define many models, but at the end will only process 4:
+
+1. SVM (using logistic with LibLineaR engine)
+2. Random Forest
+3. XGBoost
+4. Neural Network (Single Layer Perceptron)
+
+
+## Define Models
+
+
+Linear Regression with Lasso penalty (Works but will not use here)
+
+```{r}
+lasso_spec <- logistic_reg(penalty = tune(), mixture = 1) %>%
+  set_engine("glmnet")
+
+```
+
+
+SVM using poly degree 1 (linear). Need to test again if it works as I cancelled due to large processing time. (Will not use here)
+
+```{r}
+svmlinear_spec <- svm_poly(degree=1, cost = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+
+```
+
+Random Forest. We used it here, but be aware that it took a long time, for 20,000 rows it took 1.3 days!
+
+```{r}
+# Random Forest
+randomf_spec <- rand_forest(
+    mtry = tune(),
+    trees = tune(),
+    min_n = tune()
+    ) %>%
+  set_mode("classification") %>%
+  set_engine("ranger")
+
+```
+
+
+XGBoost took about 1.5 hours for 50,000 rows.
+
+```{r}
+# XGBoost
+xgboost_spec <- boost_tree(
+  trees = tune(),
+  mtry = tune(),
+  tree_depth = tune(),
+  learn_rate = .01
+  ) %>%
+  set_mode("classification") %>% 
+  set_engine("xgboost")
+
+```
+
+Neural Network with a single hidden layer. I don't believe at the time I worked in this project that Parsnip would allow for multiple layers or other types of Keras models.
+
+```{r}
+nnet_spec <- mlp(epochs = 30,
+                   hidden_units = tune(),
+                   dropout = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("keras", verbose = 2)
+```
+
+Another type of SVM using rbf. Not sure if this one worked. Didn't use in this project.
+
+```{r}
+svmrbf_spec <-
+  svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kernlab")
+```
+
+This is our SVM model, using LiblineaR.  This one was used. for 50,00 rows it took about 2 minutes
+
+```{r}
+svm_spec <-
+  logistic_reg(penalty = tune(), mixture = 1) %>%
+  set_mode("classification") %>%
+  set_engine("LiblineaR")
+```
+
+## Define workflow set
+
+Let's stalk the model we want to compare.
+
+```{r}
+workflow_set <-workflow_set(
+  preproc = list(reviews_recipe),
+  # models = list(xgboost_spec),
+  models = list(svm_spec, xgboost_spec, randomf_spec, nnet_spec),
+  #models = list(svm_spec),
+  #models = list(nnet_spec),
+  cross = TRUE
+  )
+
+workflow_set
+
+```
+
+## Fit the stack of models
+
+Here we fits the models and use hyperparameter tuning using 20 levels.
+
+```{r}
+# 
+RUN = FALSE
+if (RUN) {
+doParallel::registerDoParallel()
+start.time <- Sys.time()
+start.time
+fit_workflows <- workflow_set %>%  
+  workflow_map(
+    seed = 888,  
+    fn = "tune_grid",
+    grid = 20,
+    resamples = reviews_folds,
+    verbose = TRUE
+  )
+
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
+doParallel::stopImplicitCluster()
+}
+```
+
+## Save resulting model (backup)
+
+Let's save/load model.
+
+```{r}
+if (RUN) {
+saved_imdb_modelset <- fit_workflows
+
+#saveRDS(saved_imdb_modelset, "saved_imdb_modelset_SVM_50K.rds")
+# saveRDS(saved_imdb_modelset, "saved_imdb_modelset_50K.rds")
+saveRDS(saved_imdb_modelset, "saved_imdb_modelset_20K.rds")
+}
+########
+if (!RUN) {
+# fit_workflows <- readRDS("saved_imdb_modelset_50K.rds")
+fit_workflows <- readRDS("saved_imdb_modelset_20K.rds")
+#fit_workflows <- readRDS("saved_imdb_modelset_SVM_50K.rds")
+}
+```
+
+## Review Results of all models
+
+
+```{r}
+autoplot(fit_workflows)
+
+collect_metrics(fit_workflows)
+
+#rank_results(fit_workflows, rank_metric = "accuracy", select_best = TRUE)
+rank_results(fit_workflows, rank_metric = "roc_auc", select_best = TRUE)
+
+```
+
+Based on **ROC_AUC** one XGBOOST model had the best ROC_AUC. If you look only at **accuracy** the best models where the ones for **SVM **.
+
+```{r}
+fit_workflows %>%
+  collect_metrics()
+
+```
+
+
+## Pick and fit best model
+
+We will select best model based on **ROC_AUC**
+
+```{r}
+metric <- "roc_auc"
+
+best_workflow_id <- fit_workflows %>% 
+  rank_results(
+    rank_metric = metric,
+    select_best = TRUE
+  ) %>% 
+  slice(1) %>% 
+  pull(wflow_id)
+
+workflow_best <- extract_workflow(fit_workflows, id = best_workflow_id)
+
+best_workflow_id
+```
+
+The best model based on **ROC_AUC** is **XGBOOST**
+
+```{r}
+workflow_best_tuned <- fit_workflows[fit_workflows$wflow_id == best_workflow_id,"result"][[1]][[1]]
+
+workflow_best_tuned
+
+collect_metrics(workflow_best_tuned)
+autoplot(workflow_best_tuned)
+select_best(workflow_best_tuned, "roc_auc")
+
+```
+
+The best hyperparameter set for the selected **XGBoost** was using MTRY=18, Trees=1809 and TREE_DEPTH=12
+
+Let's test it with the unseen **test data**
+
+```{r}
+workflow_best_final <- finalize_workflow(workflow_best, select_best(workflow_best_tuned, "roc_auc"))
+
+doParallel::registerDoParallel()
+
+workflow_best_final_fit <- workflow_best_final %>% 
+  last_fit(
+    split = reviews_split
+  )
+
+doParallel::stopImplicitCluster()
+
+workflow_best_final_fit
+```
+
+
+## Peformance results of seleted model and hyperparameters
+
+```{r}
+workflow_best_final_fit %>% 
+  collect_metrics()
+
+```
+
+Results with **TEST DATA** were 82% accuracy.
+
+Let's see a confusion matrix.
+
+```{r}
+workflow_best_final_fit %>%
+  collect_predictions() %>%
+  conf_mat(sentiment, .pred_class)
+
+```
+
+
+# KERAS models
+
+Unfortunately I couldn't find a way to run more complext multi-layer feed forward DNN or a Convolutional Neural Network.
+
+
+Let's load Keras. To install Keras first we needed to install TensorFlow, and then configure R-Studio to congigure Python to point to an environment which has Python TensorFlow installed.
+
+```{r}
+library(keras)
+```
+
+
+## Read and prepare data
+
+```{r}
+# We bring in the .CSV we generated with the bake command
+# of our RECIPE above in Tidymodels
+
+reviews_nn_df <- read_csv("reviews_baked_50K.csv")
+# reviews_nn_df <- sample_n(reviews_nn_df, 5000)
+
+
+#We will add a column TYPE from "positive" "negative" to 0 and 1 which would help Keras to fit.
+reviews_nn_df2 <- reviews_nn_df %>% 
+  mutate(type = if_else(sentiment == "positive", 0, 1))
+
+# Here we switch the newly create TYPE columns with the old SENTIMENT column. Which we will remove (-502)
+reviews_nn_df2$sentiment <- reviews_nn_df2$type
+reviews_nn_df2 <- reviews_nn_df2[,-502]
+
+
+#Lets split the data into Train and Test
+reviews_nn_split <- initial_split(reviews_nn_df2)
+reviews_nn_train <- training(reviews_nn_split)
+reviews_nn_test <- testing(reviews_nn_split)
+
+#Here we clean x and train and test
+y_train <- as.matrix(reviews_nn_train$sentiment)
+x_train <- as.matrix(reviews_nn_train[,-1])
+y_test <- as.matrix(reviews_nn_test$sentiment)
+x_test <- as.matrix(reviews_nn_test[,-1])
+
+# Here we convert the 0,1 itno cateogories
+# After the below the Y will hacve TWO columns with 0,1
+y_train <- to_categorical(y_train, 2)
+y_test <- to_categorical(y_test, 2)
+
+```
+
+
+## Define models 
+
+For this part will leave tidymodels and model in R directly wirh **KERAS**. We will define more complex feed forward **Multi-Layer Neural Network** and a **CNN (Convolutional Neural Network)**
+
+### DNN (Feed Forward Deep/Dense Neural Network)
+
+This Neural Network will have two hidden layers, one with 128 nodes and another with 16.  The input layer will have 500 columns and the output will have 2
+
+```{r}
+dense_model <- keras_model_sequential() 
+
+dense_model %>% 
+  layer_dense(units = 128, activation = 'relu', input_shape = c(500)) %>% 
+  #layer_batch_normalization() %>%
+  layer_dropout(rate = 0.5) %>% 
+  #layer_dense(units = 32, activation = 'relu') %>%
+  #layer_batch_normalization() %>%
+  #layer_dropout(rate = 0.3) %>%
+  layer_dense(units = 16, activation = 'relu') %>%
+  #layer_batch_normalization() %>%
+  layer_dropout(rate = 0.4) %>%
+  layer_dense(units = 2, activation = 'softmax')
+
+summary(dense_model)
+
+```
+
+Now model is defined, let's fit it.
+
+```{r}
+dense_model %>% compile(
+  loss = 'categorical_crossentropy',
+  optimizer = optimizer_rmsprop(),
+  metrics = c('accuracy')
+)
+
+set.seed(888)
+history <- dense_model %>% fit(
+  x_train, y_train, 
+  epochs = 25, batch_size = 128, 
+  validation_split = 0.1
+)
+
+plot(history)
+
+dense_model %>% evaluate(x_test, y_test)
+
+```
+
+We got an accuracy on Test Data of **83.35%**
+
+Let's show a confusion matrix
+
+```{r}
+library(ramify)
+predict_y <- dense_model %>% predict(x_test)
+y_pred <- argmax(predict_y, rows=TRUE)
+y_testsimplified <- argmax(y_test, rows=TRUE)
+
+table(y_pred, y_testsimplified)
+
+```
+
+
+### CNN (Convolutional Neural Network)
+
+Let's define a CNN. I tried several permutations of layers and this one is the one I found gave me better results.
+
+```{r}
+cnn2_model <- keras_model_sequential()
+cnn2_model %>% 
+  layer_conv_1d(filters = 64, kernel_size = 3, activation = 'relu', 
+                input_shape = c(500,1)) %>% 
+  layer_conv_1d(filters = 64, kernel_size = 3, activation = 'relu') %>% 
+  layer_max_pooling_1d(pool_size = 3) %>% 
+  layer_conv_1d(filters = 128, kernel_size = 3, activation = 'relu') %>% 
+  layer_conv_1d(filters = 128, kernel_size = 3, activation = 'relu') %>% 
+  layer_global_average_pooling_1d() %>% 
+  layer_dropout(rate = 0.5) %>% 
+  layer_dense(units = 2, activation = 'sigmoid') %>% 
+  compile(
+    loss = 'binary_crossentropy',
+    optimizer = 'rmsprop',
+    metrics = c('accuracy')
+  )
+
+```
+
+Let's fit it. 
+
+```{r}
+history <- cnn2_model %>% fit(x_train, y_train, batch_size = 16, 
+                   epochs = 20,validation_split = 0.1)
+
+plot(history)
+
+cnn2_model %>% evaluate(x_test, y_test, batch_size = 16)
+```
+
+```{r}
+
+```
+
+
+Accuracy was not bad at **77.56%** Not bad nut not as good at other models we tested
+
+```{r}
+predict_y <- cnn2_model %>% predict(x_test)
+y_pred <- argmax(predict_y, rows=TRUE)
+y_testsimplified <- argmax(y_test, rows=TRUE)
+
+table(y_pred, y_testsimplified)
+
+```
+
+
+# Overal Results and Conclusion
+At the best our model would get at around 83% accuracy.  XGBoost had highest ROC_AUC values and ended with an accuracy of around 82%.  SVM was also had similar results at little higher at 83%. With a DENSE Neural Network getting also to 82%.
+
+In terms of time to process
+1. Neural Network -> 3 minutes
+2. SVM -> 1.5 Minutes
+3. XGBoost -> 82 minutes
+4. Random Forest -> 1.3 DAYS
+
+Also we found that Convolutional Neural Network were not as good to classify sentiment geting only to at around 77%.
+
